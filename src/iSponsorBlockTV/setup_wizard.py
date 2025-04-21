@@ -336,7 +336,7 @@ class AddDevice(ModalWithClickExit):
         pairing_code = int(
             pairing_code.replace("-", "").replace(" ", "")
         )  # remove dashes and spaces
-        device_name = self.parent.query_one("#device-name-input").value
+        device_name = self.query_one("#device-name-input").value
         paired = False
         try:
             paired = await lounge_controller.pair(pairing_code)
@@ -659,7 +659,7 @@ class ApiKeyManager(Vertical):
 
     @on(Button.Pressed, "#api-key-view")
     def pressed_api_key_view(self, event: Button.Pressed):
-        if "Show" in event.button.label:
+        if "Show" in str(event.button.label):
             event.button.label = "Hide key"
             self.query_one("#api-key-input").password = False
         else:
@@ -832,7 +832,7 @@ class ChannelWhitelistManager(Vertical):
             yield Channel(channel)
 
     def on_mount(self) -> None:
-        self.app.query_one("#warning-no-key").display = (not self.config.apikey) and bool(
+        self.query_one("#warning-no-key").display = (not self.config.apikey) and bool(
             self.config.channel_whitelist
         )
 
@@ -846,7 +846,7 @@ class ChannelWhitelistManager(Vertical):
             channel_widget = Channel(channel_dict)
             self.mount(channel_widget)
             channel_widget.focus(scroll_visible=True)
-            self.app.query_one("#warning-no-key").display = (not self.config.apikey) and bool(
+            self.query_one("#warning-no-key").display = (not self.config.apikey) and bool(
                 self.config.channel_whitelist
             )
 
@@ -855,7 +855,7 @@ class ChannelWhitelistManager(Vertical):
         channel_to_remove: Element = event.button.parent
         self.config.channel_whitelist.remove(channel_to_remove.element_data)
         channel_to_remove.remove()
-        self.app.query_one("#warning-no-key").display = (not self.config.apikey) and bool(
+        self.query_one("#warning-no-key").display = (not self.config.apikey) and bool(
             self.config.channel_whitelist
         )
 
@@ -950,7 +950,7 @@ class ISponsorBlockTVSetupMainScreen(Screen):
     def changed_api_key(self, event: Input.Changed):
         try:  # ChannelWhitelist might not be mounted
             # Show if no api key is set and at least one channel is in the whitelist
-            self.app.query_one("#warning-no-key").display = (
+            self.query_one("#warning-no-key").display = (
                 not event.input.value
             ) and self.config.channel_whitelist
         except BaseException:
