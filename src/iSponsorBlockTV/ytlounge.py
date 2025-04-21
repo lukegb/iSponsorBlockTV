@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import json
 from typing import Any, List
 
@@ -10,6 +11,38 @@ from .constants import youtube_client_blacklist
 create_task = asyncio.create_task
 
 
+@dataclasses.dataclass(frozen=True)
+class YtLoungeState:
+    videoId: str | None = None
+    currentTime: float | None = None
+    state: pyytlounge.State = pyytlounge.State.Stopped
+
+
+class YtLoungeEventListener(pyytlounge.EventListener):
+    def __init__(self):
+        self._state = YtLoungeState()
+        self.callback = None
+
+    async def _replace_state(self, state: YtLoungeState):
+        self._state = state
+        if self.callback:
+            await self.callback(self._state)
+
+    async def _update_state(self, **kwargs):
+        await self._replace_state(dataclasses.replace(self._state, **kwargs))
+
+    async def playback_state_changed(self, event: pyytlounge.PlaybackStateEvent) -> None:
+        await self._update_state(currentTime=event.current_time, state=event.state)
+
+    async def now_playing_changed(self, event: pyytlounge.NowPlayingEvent) -> None:
+        await self._update_state(
+            videoId=event.video_id, currentTime=event.current_time, state=event.state
+        )
+
+    async def disconnected(self, event: pyytlounge.DisconnectedEvent) -> None:
+        await self._replace_state(YtLoungeState())
+
+
 class YtLoungeApi(pyytlounge.YtLoungeApi):
     def __init__(
         self,
@@ -18,8 +51,11 @@ class YtLoungeApi(pyytlounge.YtLoungeApi):
         api_helper=None,
         logger=None,
     ):
+        self._event_listener = YtLoungeEventListener()
         super().__init__(
-            config.join_name if config else "iSponsorBlockTV", logger=logger
+            config.join_name if config else "iSponsorBlockTV",
+            logger=logger,
+            event_listener=self._event_listener,
         )
         self.auth.screen_id = screen_id
         self.auth.lounge_id_token = None
@@ -51,17 +87,18 @@ class YtLoungeApi(pyytlounge.YtLoungeApi):
     # Subscribe to the lounge and start the watchdog
     async def subscribe_monitored(self, callback):
         self.callback = callback
+        self._event_listener.callback = callback
         try:
             self.subscribe_task_watchdog.cancel()
         except BaseException:
             pass  # No watchdog task
-        self.subscribe_task = asyncio.create_task(super().subscribe(callback))
+        self.subscribe_task = asyncio.create_task(super().subscribe())
         self.subscribe_task_watchdog = asyncio.create_task(self._watchdog())
         return self.subscribe_task
 
     # Process a lounge subscription event
     # skipcq: PY-R1000
-    def _process_event(self, event_type: str, args: List[Any]):
+    async def _process_event(self, event_type: str, args: List[Any]):
         self.logger.debug(f"process_event({event_type}, {args})")
         # (Re)start the watchdog
         try:
@@ -163,7 +200,7 @@ class YtLoungeApi(pyytlounge.YtLoungeApi):
             self.playback_speed = float(data.get("playbackSpeed", "1"))
             create_task(self.get_now_playing())
 
-        super()._process_event(event_type, args)
+        await super()._process_event(event_type, args)
 
     # Set the volume to a specific value (0-100)
     async def set_volume(self, volume: int) -> None:
